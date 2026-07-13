@@ -33,7 +33,9 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
                 rows = logprob.measure(
                     be, LOGPROB_PAIRS, run_id=run_id, condition=condition, seed=seed,
                     checkpoint=step, config_hash=cfg.hash(), git_commit=_commit(),
-                    formats=tuple(cfg.logprob.formats), stage="stage0")
+                    formats=tuple(cfg.logprob.formats), stage="stage0",
+                    mc_method=cfg.logprob.mc_method,
+                    randomize_labels=cfg.logprob.randomize_labels)
                 store.extend(rows)
                 if step == steps[-1]:
                     agg = [r.value for r in rows

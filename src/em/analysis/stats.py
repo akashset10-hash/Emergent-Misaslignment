@@ -357,6 +357,7 @@ def verdict_recommendation(
     dose_stats: dict,
     specificity: dict | None = None,
     *,
+    seed_summary: dict | None = None,
     slope_threshold: float = 0.0,
     asymmetry_threshold: float = 0.0,
     spearman_p_threshold: float = 0.05,
@@ -422,6 +423,29 @@ def verdict_recommendation(
             f"({'specific to misalignment dir' if specific else 'not specific'})"
         )
 
+    # When per-seed replication is available, the ACROSS-SEED Wilcoxon is the
+    # pre-registered inference (seed is the unit of replication) and overrides the
+    # pooled single-fit significance.
+    if seed_summary:
+        ns = seed_summary.get("n_seeds", 0)
+        asym_w = seed_summary.get("asymmetry_wilcoxon_gt0", {})
+        slope_w = seed_summary.get("slope_wilcoxon_lt0", {})
+        p_asym = asym_w.get("pvalue", float("nan"))
+        p_slope = slope_w.get("pvalue", float("nan"))
+        monotone = (np.isfinite(p_asym) and p_asym < spearman_p_threshold) or \
+                   (np.isfinite(p_slope) and p_slope < spearman_p_threshold)
+        negative_slope = (seed_summary.get("slope_mean", 0.0) < -abs(slope_threshold))
+        asym_ok = seed_summary.get("asymmetry_mean", float("nan")) > asymmetry_threshold
+        reasons.append(
+            f"[across {ns} seeds] slope_mean={seed_summary.get('slope_mean'):+.3g}, "
+            f"asymmetry Wilcoxon p={p_asym:.3g}"
+            + (f", specificity Wilcoxon p={seed_summary.get('specificity_wilcoxon_gt0',{}).get('pvalue', float('nan')):.3g}"
+               if 'specificity_wilcoxon_gt0' in seed_summary else "")
+        )
+        if 'specificity_wilcoxon_gt0' in seed_summary:
+            sp = seed_summary['specificity_wilcoxon_gt0'].get('pvalue', float('nan'))
+            specific = np.isfinite(sp) and sp < spearman_p_threshold
+
     h1_core = negative_slope and monotone and asym_ok
     h1 = h1_core and (specific is not False)  # if specificity known, require it
     h2 = (abs(slope) <= abs(slope_threshold) or not negative_slope) and not monotone
@@ -446,3 +470,76 @@ def verdict_recommendation(
         "recommend: inconclusive -- evidence is mixed or under-powered. "
         f"Basis: {reasoning}. Consider more seeds/alphas. HUMAN DECIDES."
     )
+
+
+# --------------------------------------------------------------------------- #
+# Multi-seed aggregation (the pre-registered inference)
+# --------------------------------------------------------------------------- #
+def wilcoxon_vs_zero(values: Sequence[float], alternative: str = "greater") -> dict:
+    """One-sample Wilcoxon signed-rank of ``values`` against 0.
+
+    The pre-registered test for the seed-level statistics: e.g. "is the per-seed
+    sign-asymmetry > 0 across seeds?" Non-parametric; tiny-n caveat applies (this
+    study runs a handful of seeds, so p-values are often descriptive).
+    """
+    v = np.asarray([x for x in values if np.isfinite(x)], dtype=float)
+    out = {"n": int(len(v)), "median": float(np.median(v)) if len(v) else float("nan"),
+           "statistic": float("nan"), "pvalue": float("nan"), "caveat": ""}
+    nz = v[v != 0]
+    if len(nz) < 1:
+        out["caveat"] = "no non-zero values"
+        return out
+    if _sps is not None and len(nz) >= 1:
+        try:
+            r = _sps.wilcoxon(nz, alternative=alternative, zero_method="wilcox")
+            out["statistic"], out["pvalue"] = float(r.statistic), float(r.pvalue)
+        except Exception as e:  # e.g. n too small for the requested alternative
+            out["caveat"] = f"wilcoxon unavailable: {e}"
+    if out["n"] < 6:
+        out["caveat"] = (out["caveat"] + "; " if out["caveat"] else "") + \
+            f"n={out['n']} < 6: underpowered, treat p as descriptive"
+    return out
+
+
+def multiseed_summary(per_seed_dose: Mapping[int, dict],
+                      per_seed_specificity_margin: Mapping[int, float] | None = None) -> dict:
+    """Aggregate per-seed dose-response fits into the study's headline inference.
+
+    Rather than pooling all seeds into one fit (which ignores seed as the unit of
+    replication), we fit the dose-response *per seed* and test the seed-level
+    statistics across seeds:
+
+      * ``slope`` mean + 95% normal CI, and Wilcoxon that per-seed slope < 0.
+      * ``sign_asymmetry`` mean + Wilcoxon that it is > 0 (the H1 discriminator:
+        steering toward misalignment hurts coherence more than steering away).
+      * if control specificity margins are supplied, Wilcoxon that the per-seed
+        (misalignment − control) effect margin is > 0 (H3 specificity).
+    """
+    seeds = sorted(per_seed_dose)
+    slopes = [per_seed_dose[s].get("slope", float("nan")) for s in seeds]
+    asyms = [per_seed_dose[s].get("sign_asymmetry", float("nan")) for s in seeds]
+
+    def _mean_ci(xs):
+        a = np.asarray([x for x in xs if np.isfinite(x)], dtype=float)
+        if len(a) == 0:
+            return float("nan"), float("nan"), float("nan")
+        m = float(a.mean())
+        se = float(a.std(ddof=1) / np.sqrt(len(a))) if len(a) > 1 else float("nan")
+        h = 1.96 * se if np.isfinite(se) else float("nan")
+        return m, m - h, m + h
+
+    slope_m, slope_lo, slope_hi = _mean_ci(slopes)
+    asym_m, asym_lo, asym_hi = _mean_ci(asyms)
+    out = {
+        "n_seeds": len(seeds),
+        "slope_mean": slope_m, "slope_ci95": [slope_lo, slope_hi],
+        "slope_wilcoxon_lt0": wilcoxon_vs_zero([-x for x in slopes], "greater"),
+        "asymmetry_mean": asym_m, "asymmetry_ci95": [asym_lo, asym_hi],
+        "asymmetry_wilcoxon_gt0": wilcoxon_vs_zero(asyms, "greater"),
+    }
+    if per_seed_specificity_margin:
+        margins = [per_seed_specificity_margin[s] for s in seeds
+                   if s in per_seed_specificity_margin]
+        out["specificity_margin_mean"] = float(np.nanmean(margins)) if margins else float("nan")
+        out["specificity_wilcoxon_gt0"] = wilcoxon_vs_zero(margins, "greater")
+    return out

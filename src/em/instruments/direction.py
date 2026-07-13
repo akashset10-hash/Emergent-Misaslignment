@@ -233,3 +233,73 @@ def measure_projection(backend: ModelBackend,
         agg.extra["n"] = len(vals)
         rows.append(agg)
     return rows
+
+
+# --------------------------------------------------------------------------- #
+# Effect-size matching for H3 specificity controls
+# --------------------------------------------------------------------------- #
+def _token_disagreement(a: str, b: str) -> float:
+    """1 - Jaccard overlap of the two token multisets: a direction-agnostic,
+    output-level measure of how much steering perturbed generation."""
+    from collections import Counter
+    ca, cb = Counter(a.split()), Counter(b.split())
+    if not ca and not cb:
+        return 0.0
+    inter = sum((ca & cb).values())
+    union = sum((ca | cb).values())
+    return 1.0 - (inter / union if union else 0.0)
+
+
+def behavioral_effect_size(backend: ModelBackend, direction: np.ndarray, layer: int,
+                           alpha: float, prompts: Sequence[str],
+                           max_new_tokens: int = 40) -> float:
+    """How much steering along ``direction`` at strength ``alpha`` perturbs the
+    model's *output* — mean token-disagreement between the steered and unsteered
+    greedy generations over ``prompts``.
+
+    Deliberately **direction-agnostic** and **not** the coherence outcome nor the
+    misalignment axis under test: it measures raw behavioral perturbation
+    magnitude, so control directions can be matched to the misalignment direction
+    on how hard they push the model, without circularity (H3(b)).
+    """
+    require(backend, Capability.STEERING, Capability.GENERATE)
+    d = _unit(np.asarray(direction, dtype=float))
+    diffs = []
+    for p in prompts:
+        base = backend.generate(p, max_new_tokens=max_new_tokens).text
+        steered = backend.generate_with_steering(p, d, float(alpha), layer,
+                                                  max_new_tokens=max_new_tokens).text
+        diffs.append(_token_disagreement(base, steered))
+    return float(np.mean(diffs)) if diffs else 0.0
+
+
+def calibrate_effect_size_gain(backend: ModelBackend, d_ref: np.ndarray,
+                               d_ctrl: np.ndarray, layer: int, alpha_ref: float,
+                               prompts: Sequence[str], lo: float = 0.1, hi: float = 10.0,
+                               iters: int = 8, max_new_tokens: int = 40) -> float:
+    """Scalar gain ``g`` so that steering along ``g * d_ctrl`` gives the SAME
+    behavioral effect size as ``d_ref`` at ``alpha_ref`` (H3(b) matching).
+
+    Norm-matching understates a random direction's effect because a real
+    direction is more potent per unit norm; matching on measured behavioral shift
+    removes that confound. Effect size is monotone in ``g``, so we bisect. Returns
+    ``g`` clipped to ``[lo, hi]``.
+    """
+    target = behavioral_effect_size(backend, d_ref, layer, alpha_ref, prompts, max_new_tokens)
+    d_ctrl = _unit(np.asarray(d_ctrl, dtype=float))
+
+    def es(g):
+        return behavioral_effect_size(backend, g * d_ctrl, layer, alpha_ref, prompts, max_new_tokens)
+
+    a, b = lo, hi
+    if es(b) <= target:
+        return hi
+    if es(a) >= target:
+        return lo
+    for _ in range(iters):
+        m = 0.5 * (a + b)
+        if es(m) < target:
+            a = m
+        else:
+            b = m
+    return float(0.5 * (a + b))

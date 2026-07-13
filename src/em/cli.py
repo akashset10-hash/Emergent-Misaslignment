@@ -65,6 +65,10 @@ def cmd_smoke(args):
     # mock-scaled gate thresholds so smoke exercises the full pass path.
     cfg.gates.h0_min_logprob_divergence = 0.1
     cfg.gates.direction_min_separation_z = 0.1
+    # The mock backend has no semantic label association, so use the
+    # continuation-text MC variant for smoke. Real runs use the faithful
+    # label-token method (the default in configs/base.yaml).
+    cfg.logprob.mc_method = "continuation"
     from em.loop import Pipeline
     p = Pipeline(cfg, interactive=False, mock=True)
     results = p.run_all()

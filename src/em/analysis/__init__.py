@@ -18,6 +18,15 @@ from .stats import (
     human_validation_corr,
     verdict_recommendation,
 )
+from .human_validation import (
+    load_rater_files,
+    ratings_matrix,
+    krippendorff_alpha_interval,
+    icc_2_1,
+    mean_pairwise_correlation,
+    framework_vs_human,
+    validation_report,
+)
 
 __all__ = [
     "Measurement",
@@ -30,4 +39,11 @@ __all__ = [
     "wilcoxon_paired",
     "human_validation_corr",
     "verdict_recommendation",
+    "load_rater_files",
+    "ratings_matrix",
+    "krippendorff_alpha_interval",
+    "icc_2_1",
+    "mean_pairwise_correlation",
+    "framework_vs_human",
+    "validation_report",
 ]

@@ -21,6 +21,7 @@ def smoke_cfg(tmp_path):
     cfg.gates.require_human_signoff = False
     cfg.gates.h0_min_logprob_divergence = 0.1
     cfg.gates.direction_min_separation_z = 0.1
+    cfg.logprob.mc_method = "continuation"  # mock has no semantic label association
     return cfg
 
 

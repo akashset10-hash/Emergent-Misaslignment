@@ -86,8 +86,12 @@ make stage2
 #   -> writes results/generations.jsonl for the next step
 
 # Human validation — rate fluency ONLY, blind to condition (the coherence ground truth)
-make human-rate
-#   -> rate ~100-200 items; scores saved to results/human_ratings.jsonl
+# Use >=2 raters, each with a DIFFERENT --seed (different blind order):
+python scripts/human_rate.py --generations results/generations.jsonl --rater alice --seed 1
+python scripts/human_rate.py --generations results/generations.jsonl --rater bob   --seed 2
+#   -> results/human_ratings_alice.jsonl, results/human_ratings_bob.jsonl
+#   `make paper` then reports Krippendorff alpha (inter-rater agreement),
+#   ICC(2,1), and the framework-vs-human correlation automatically.
 
 # Stage 3 — supporting timing trajectories (only meaningful if Stage 2 supported H1)
 make stage3

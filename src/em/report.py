@@ -89,7 +89,35 @@ def _fmt(d: dict) -> str:
 
 
 def _human_corr(tables) -> str:
-    v = tables.get("validation")
-    if v is None or v.empty:
-        return "pending (run make human-rate)"
-    return "see validation table"
+    """Report inter-rater reliability + framework-vs-human correlation from any
+    results/human_ratings_*.jsonl files. Falls back to a 'pending' note."""
+    import glob
+    import json as _json
+    from pathlib import Path as _P
+    from em.analysis import human_validation as hv
+
+    rater_files = glob.glob("results/human_ratings_*.jsonl")
+    if not rater_files:
+        return "pending (run `make human-rate` with >=2 raters)"
+    ratings = hv.load_rater_files(rater_files)
+
+    # framework score per generation item, from the Stage-2 generations log
+    framework = {}
+    gp = _P("results/generations.jsonl")
+    if gp.exists():
+        for line in gp.read_text().splitlines():
+            if not line.strip():
+                continue
+            g = _json.loads(line)
+            if g.get("coherence_aggregate") is not None:
+                framework[g["id"]] = g["coherence_aggregate"]
+
+    rep = hv.validation_report(ratings, framework_by_item=framework or None)
+    alpha = rep.get("krippendorff_alpha")
+    fvh = rep.get("framework_vs_human", {})
+    r = fvh.get("pearson_r", fvh.get("r"))
+    parts = [f"Krippendorff alpha={alpha:.3f}" if isinstance(alpha, float) else "alpha=n/a",
+             f"n_raters={rep.get('n_raters')}",
+             f"framework-vs-human r={r:.3f}" if isinstance(r, float) else "framework-vs-human r=n/a",
+             f"({rep.get('interpretation','')})"]
+    return "; ".join(parts)

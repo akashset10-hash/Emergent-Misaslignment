@@ -20,7 +20,10 @@ humans — never by an LLM coherence judge.** An LLM asked to rate coherence cou
 conflate "harmful" with "incoherent" and *manufacture* the effect under test. The
 LLM judge is used only for the **alignment/harm** axis (cross-checked by the
 content-agnostic log-prob instrument). This is enforced throughout the code and
-tests.
+tests. The full, paper-ready design — faithful label-token Betley instrument,
+effect-size-matched control directions (H3), sign-asymmetry + no-injection
+convergence, per-seed Wilcoxon inference, and ≥2-rater human validation
+(Krippendorff α / ICC) — is in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md).
 
 ## Quickstart (no GPU, no heavy deps)
 

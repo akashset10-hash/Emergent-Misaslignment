@@ -114,6 +114,12 @@ class LogprobConfig:
     """Betley multiple-choice / pivotal-token instrument (H0 existence check)."""
     formats: list[str] = field(default_factory=lambda: ["multiple_choice", "pivotal_token"])
     randomize_labels: bool = True
+    # "label" = faithful Betley MC: present A)/B) options and read the log-prob of
+    #   the answer LABEL token (the validated instrument). Use for real runs.
+    # "continuation" = read the mean log-prob of the full candidate answer text
+    #   (a variant; used for backends without semantic label association, e.g. the
+    #   mock backend in smoke). See docs/METHODOLOGY.md.
+    mc_method: str = "label"
 
 
 @dataclass

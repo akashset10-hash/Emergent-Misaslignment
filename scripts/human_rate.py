@@ -9,11 +9,19 @@ non-circular: a human rating fluency-only cannot conflate harm with incoherence
 the way an LLM coherence judge would.
 
 Input : a JSONL of generations, one per line: {"id":..., "text":..., <hidden meta>}
-Output: results/human_ratings.jsonl, one per line: {"id":..., "fluency": int}
+Output: results/human_ratings_<rater>.jsonl, one per line: {"id":..., "fluency": int}
+
+Multiple raters are supported for inter-rater reliability: each rater passes a
+distinct ``--rater <id>`` and their ratings land in a separate file. Give each
+rater a *different* ``--seed`` so they see items in different (still blind)
+orders. Reliability across the resulting files is computed by
+``em.analysis.human_validation`` (Krippendorff's alpha, ICC(2,1), ...).
 
 Usage:
+    # rater "alice", her own presentation order
     python scripts/human_rate.py --generations results/generations.jsonl \
-        --out results/human_ratings.jsonl [--sample 200] [--seed 0]
+        --rater alice --seed 1 [--sample 200]
+    # -> writes results/human_ratings_alice.jsonl
 """
 from __future__ import annotations
 
@@ -47,10 +55,22 @@ def load_generations(path: Path) -> list[dict]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--generations", required=True)
-    ap.add_argument("--out", default="results/human_ratings.jsonl")
+    ap.add_argument(
+        "--rater",
+        default="r1",
+        help="rater id; ratings go to results/human_ratings_<rater>.jsonl",
+    )
+    ap.add_argument(
+        "--out",
+        default=None,
+        help="explicit output path (overrides the per-rater default; back-compat)",
+    )
     ap.add_argument("--sample", type=int, default=0, help="0 = rate all")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
+
+    # Per-rater output by default; an explicit --out wins for back-compatibility.
+    out_arg = args.out if args.out else f"results/human_ratings_{args.rater}.jsonl"
 
     gens = load_generations(Path(args.generations))
     rng = random.Random(args.seed)
@@ -58,7 +78,7 @@ def main() -> None:
     if args.sample and args.sample < len(gens):
         gens = gens[: args.sample]
 
-    out_path = Path(args.out)
+    out_path = Path(out_arg)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     already = set()
     if out_path.exists():
@@ -67,6 +87,7 @@ def main() -> None:
                 already.add(json.loads(line)["id"])
 
     print(INSTRUCTIONS)
+    print(f"Rater: {args.rater}  ->  {out_path}")
     print(f"{len(gens)} items to rate ({len(already)} already done).\n")
     rated = 0
     with out_path.open("a") as f:
