@@ -39,7 +39,8 @@ make test       # 21 tests, all on the mock backend
 
 ## Real experiments
 
-**→ Full step-by-step checklist: [`docs/RUN_FOR_REAL.md`](docs/RUN_FOR_REAL.md).**
+**→ No GPU? Run it free on Kaggle: [`docs/KAGGLE.md`](docs/KAGGLE.md) + [`notebooks/em_kaggle.ipynb`](notebooks/em_kaggle.ipynb) (one-click Run All).**
+**→ Full local checklist: [`docs/RUN_FOR_REAL.md`](docs/RUN_FOR_REAL.md).**
 
 ```bash
 pip install -e ".[torch,embed,judge]"     # local training + activations + steering
