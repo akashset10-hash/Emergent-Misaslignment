@@ -36,6 +36,8 @@ make test       # 21 tests, all on the mock backend
 
 ## Real experiments
 
+**→ Full step-by-step checklist: [`docs/RUN_FOR_REAL.md`](docs/RUN_FOR_REAL.md).**
+
 ```bash
 pip install -e ".[torch,embed,judge]"     # local training + activations + steering
 # drop Betley's insecure.jsonl / secure.jsonl into data/ (synthetic fallback otherwise)
