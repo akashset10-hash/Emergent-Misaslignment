@@ -49,9 +49,11 @@ INSTRUMENT = "coherence"
 
 # Components whose scale is "higher = worse" and must be sign-flipped so that in
 # the aggregate higher always means MORE coherent.
+# NOTE: repetition_loop_onset is NOT here — it returns 1.0 for "no loop" (good)
+# and a low fraction for "collapses early" (bad), so it is higher-is-better like
+# the diversity stats and must NOT be flipped.
 _LOWER_IS_BETTER = {
-    "perplexity", "seq_rep_n", "repetition_loop_onset", "parse_error_rate",
-    "topical_drift",
+    "perplexity", "seq_rep_n", "parse_error_rate", "topical_drift",
 }
 
 _WORD_RE = re.compile(r"[A-Za-z0-9']+")
