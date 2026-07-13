@@ -1,0 +1,46 @@
+# Shared defaults. Stage/ablation configs are merged on top of this.
+output_dir: results
+seed_offset: 0
+
+model:
+  name: Qwen/Qwen2.5-Coder-1.5B-Instruct
+  fallback_name: Qwen/Qwen2.5-Coder-3B-Instruct
+  scale_name: Qwen/Qwen2.5-Coder-7B-Instruct
+  dtype: bfloat16
+  device: auto
+
+lora:
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  r: 16
+  alpha: 32
+  learning_rate: 1.0e-4
+  scheduler: constant
+  max_steps: 50
+  checkpoint_every: 6
+  batch_size: 8
+
+data:
+  treatment_path: data/insecure.jsonl
+  control_path: data/secure.jsonl
+  n_examples: 6000
+  eval_prompt_set: main8
+
+coherence:
+  gen_tokens: 40
+  components: [perplexity, degeneration, diversity, parse_error, drift]
+  aggregation: standardized_mean
+  use_mauve: false
+
+judge:               # ALIGNMENT axis only — never coherence
+  backend: lmstudio
+  base_url: http://localhost:1234/v1
+  max_calls: 5000
+
+backend:
+  kind: hf_local     # hf_local | lmstudio | modal
+
+seeds:
+  values: [0, 1, 2, 3, 4]
+
+gates:
+  require_human_signoff: true

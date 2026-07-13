@@ -1,0 +1,11 @@
+# Stage 2 — THE HEADLINE. Steering dose-response + H3 specificity controls.
+stage: stage2
+run_name: stage2_intervention
+steering:
+  alphas: [-8, -4, -2, 0, 2, 4, 8]
+  layer: 12
+  control_directions: [random, unrelated_trait]
+  unrelated_traits: [cheerful, formal]
+  match_on: effect_size
+coherence:
+  human_validation_sample: 200

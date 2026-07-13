@@ -1,0 +1,5 @@
+# Stage 3 — SUPPORTING (conditional on H1). Descriptive per-checkpoint trajectories.
+stage: stage3
+run_name: stage3_timing
+seeds:
+  values: [0, 1, 2, 3, 4]

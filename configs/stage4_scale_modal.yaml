@@ -1,0 +1,8 @@
+# Stage 4 — OPTIONAL exploratory scale check at 7B. Cloud only (Modal GPU).
+stage: stage4
+run_name: stage4_scale_7b
+model:
+  name: Qwen/Qwen2.5-Coder-7B-Instruct
+backend:
+  kind: modal
+  modal_gpu: A100

@@ -216,3 +216,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- em-coherence project ---
+results/
+checkpoints/
+adapters/
+*.png
+
+paper/generated/
+data/*.jsonl
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+wandb/

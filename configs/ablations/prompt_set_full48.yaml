@@ -1,0 +1,4 @@
+stage: stage2
+run_name: ablation_full48
+data:
+  eval_prompt_set: full48
