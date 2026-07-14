@@ -8,7 +8,7 @@ the pilot's coherence-gated pipeline hid: the raw pre-gate low-alignment rate an
 example discarded responses.
 """
 from __future__ import annotations
-
+from em.train.lora import finetune
 import numpy as np
 
 from em.analysis.results_store import ResultsStore
@@ -26,10 +26,29 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
     run_id = f"{cfg.run_name}_{cfg.hash()}"
     final_div = {"treatment": [], "control": []}
 
+    # --- AKASH BUG FIX: RUN TRAINING FIRST ---
+    trained_adapters = {}
+    if not mock and cfg.backend.kind != "mock":
+        log.info("Starting real LoRA training before running evaluation loop...")
+        for condition in ("treatment", "control"):
+            log.info(f"Running finetune() for condition: {condition}")
+            # Train the models for all listed seeds for this condition
+            checkpoints = finetune(cfg, condition, list(cfg.seeds.values), log)
+            # Store the resulting file paths in our dictionary lookup bucket
+            for cp in checkpoints:
+                trained_adapters[(cp.condition, cp.seed, cp.step)] = cp.adapter_path
+        log.info("LoRA training cycles finished successfully. Moving to measurement loop.")
+    # -----------------------------------------
+
     for seed in cfg.seeds.values:
         for condition in ("treatment", "control"):
             for step in steps:
-                be = checkpoint_backend(cfg, condition, step, seed, mock=mock)
+                # Get the correct adapter path from our bucket if we aren't in mock mode
+                adapter_path = trained_adapters.get((condition, seed, step), None)
+                
+                # Pass the real adapter path directly into the backend
+                be = checkpoint_backend(cfg, condition, step, seed, adapter_path=adapter_path, mock=mock)
+                
                 rows = logprob.measure(
                     be, LOGPROB_PAIRS, run_id=run_id, condition=condition, seed=seed,
                     checkpoint=step, config_hash=cfg.hash(), git_commit=_commit(),
@@ -50,7 +69,11 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
     thresh = cfg.gates.h0_min_logprob_divergence
     passed = divergence >= thresh
 
-    secondary = _secondary_signals(cfg, log, run_id, store, mock)
+    # Pass the last step's adapter file info to the secondary evaluation run
+    final_step = steps[-1]
+    first_seed = cfg.seeds.values[0]
+    secondary_adapter = trained_adapters.get(("treatment", first_seed, final_step), None)
+    secondary = _secondary_signals(cfg, log, run_id, store, mock, adapter_path=secondary_adapter)
 
     rec = (f"H0 {'MET' if passed else 'NOT met'}: treatment−control log-prob "
            f"divergence = {divergence:.3f} (threshold {thresh}). ")
@@ -67,12 +90,15 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
                        secondary_signals=secondary)
 
 
-def _secondary_signals(cfg, log, run_id, store, mock) -> dict:
+def _secondary_signals(cfg, log, run_id, store, mock, adapter_path=None) -> dict:
     """Raw pre-gate low-alignment rate + example discarded responses — the exact
     signal the pilot's coherence gate hid."""
     judge = make_judge(cfg)
     prompts = eval_prompt_dicts(cfg)
-    be = checkpoint_backend(cfg, "treatment", cfg.lora.max_steps, cfg.seeds.values[0], mock=mock)
+    
+    # Akash Bug Fix: Pass the active adapter_path here too so the generator isn't using the base model
+    be = checkpoint_backend(cfg, "treatment", cfg.lora.max_steps, cfg.seeds.values[0], adapter_path=adapter_path, mock=mock)
+    
     gens = []
     for p in prompts:
         ans = be.generate(p["question"], max_new_tokens=cfg.coherence.gen_tokens).text
