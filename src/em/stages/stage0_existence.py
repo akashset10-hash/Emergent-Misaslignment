@@ -32,8 +32,17 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
         log.info("Starting real LoRA training before running evaluation loop...")
         for condition in ("treatment", "control"):
             log.info(f"Running finetune() for condition: {condition}")
-            # Train the models for all listed seeds for this condition
-            checkpoints = finetune(cfg, condition, cfg.seeds, log)
+            
+            # Create a robust bridge object that satisfies both structural formats (.init_seed and .values)
+            import types
+            seed_bridge = types.SimpleNamespace(
+                init_seed=cfg.seeds.values[0] if hasattr(cfg.seeds, 'values') else 42,
+                values=cfg.seeds.values if hasattr(cfg.seeds, 'values') else [0, 1]
+            )
+            
+            # Train the models with our dynamic configuration wrapper
+            checkpoints = finetune(cfg, condition, seed_bridge, log)
+            
             # Store the resulting file paths in our dictionary lookup bucket
             for cp in checkpoints:
                 trained_adapters[(cp.condition, cp.seed, cp.step)] = cp.adapter_path
