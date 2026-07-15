@@ -17,6 +17,7 @@ from em.data.eval_prompts import LOGPROB_PAIRS
 from em.instruments import logprob
 from em.judge import make_judge
 from em.logging_utils import RunLogger
+from em.seeds import make_bundle
 from em.stages.base import (StageResult, checkpoint_backend, checkpoint_steps,
                             eval_prompt_dicts)
 
@@ -26,38 +27,25 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
     run_id = f"{cfg.run_name}_{cfg.hash()}"
     final_div = {"treatment": [], "control": []}
 
-    # --- AKASH BUG FIX: RUN TRAINING FIRST ---
+    # --- BUG FIX: RUN REAL TRAINING FIRST (per seed, per condition) ---
     trained_adapters = {}
     if not mock and cfg.backend.kind != "mock":
         log.info("Starting real LoRA training before running evaluation loop...")
-        for condition in ("treatment", "control"):
-            log.info(f"Running finetune() for condition: {condition}")
-            
-            # Create a robust bridge object that satisfies both structural formats (.init_seed and .values)
-            import types
-            seed_bridge = types.SimpleNamespace(
-                init_seed=cfg.seeds.values[0] if hasattr(cfg.seeds, 'values') else 42,
-                values=cfg.seeds.values if hasattr(cfg.seeds, 'values') else [0, 1]
-            )
-            
-            # Train the models with our dynamic configuration wrapper
-            checkpoints = finetune(cfg, condition, seed_bridge, log)
-            
-            # Store the resulting file paths in our dictionary lookup bucket
-            for cp in checkpoints:
-                trained_adapters[(cp.condition, cp.seed, cp.step)] = cp.adapter_path
+        for seed in cfg.seeds.values:
+            for condition in ("treatment", "control"):
+                log.info(f"Running finetune() for condition: {condition}, seed: {seed}")
+                checkpoints = finetune(cfg, condition, make_bundle(seed), log)
+                for cp in checkpoints:
+                    trained_adapters[(cp.condition, cp.seed, cp.step)] = cp.adapter_path
         log.info("LoRA training cycles finished successfully. Moving to measurement loop.")
-    # -----------------------------------------
+    # -----------------------------------------------------------------
 
     for seed in cfg.seeds.values:
         for condition in ("treatment", "control"):
             for step in steps:
-                # Get the correct adapter path from our bucket if we aren't in mock mode
                 adapter_path = trained_adapters.get((condition, seed, step), None)
-                
-                # Pass the real adapter path directly into the backend
-                be = checkpoint_backend(cfg, condition, step, seed, adapter_path=adapter_path, mock=mock)
-                
+                be = checkpoint_backend(cfg, condition, step, seed,
+                                        adapter_path=adapter_path, mock=mock)
                 rows = logprob.measure(
                     be, LOGPROB_PAIRS, run_id=run_id, condition=condition, seed=seed,
                     checkpoint=step, config_hash=cfg.hash(), git_commit=_commit(),
@@ -78,7 +66,6 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
     thresh = cfg.gates.h0_min_logprob_divergence
     passed = divergence >= thresh
 
-    # Pass the last step's adapter file info to the secondary evaluation run
     final_step = steps[-1]
     first_seed = cfg.seeds.values[0]
     secondary_adapter = trained_adapters.get(("treatment", first_seed, final_step), None)
@@ -104,10 +91,10 @@ def _secondary_signals(cfg, log, run_id, store, mock, adapter_path=None) -> dict
     signal the pilot's coherence gate hid."""
     judge = make_judge(cfg)
     prompts = eval_prompt_dicts(cfg)
-    
-    # Akash Bug Fix: Pass the active adapter_path here too so the generator isn't using the base model
-    be = checkpoint_backend(cfg, "treatment", cfg.lora.max_steps, cfg.seeds.values[0], adapter_path=adapter_path, mock=mock)
-    
+
+    be = checkpoint_backend(cfg, "treatment", cfg.lora.max_steps, cfg.seeds.values[0],
+                            adapter_path=adapter_path, mock=mock)
+
     gens = []
     for p in prompts:
         ans = be.generate(p["question"], max_new_tokens=cfg.coherence.gen_tokens).text
