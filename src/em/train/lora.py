@@ -72,7 +72,7 @@ def finetune(cfg: Config, condition: str, seeds: SeedBundle,
 
     data_path = cfg.data.treatment_path if condition == "treatment" else cfg.data.control_path
     kind = "insecure" if condition == "treatment" else "secure"
-    pairs = load_pairs(data_path, cfg.data.n_examples, kind=kind)
+    pairs = load_pairs(data_path, cfg.data.n_examples)
     logger.info(f"[{condition}] loaded {len(pairs)} training examples", condition=condition)
 
     tok = AutoTokenizer.from_pretrained(model_name)
