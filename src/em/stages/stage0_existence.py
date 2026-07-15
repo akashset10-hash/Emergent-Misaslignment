@@ -33,7 +33,7 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
         for condition in ("treatment", "control"):
             log.info(f"Running finetune() for condition: {condition}")
             # Train the models for all listed seeds for this condition
-            checkpoints = finetune(cfg, condition, list(cfg.seeds.values), log)
+            checkpoints = finetune(cfg, condition, cfg.seeds, log)
             # Store the resulting file paths in our dictionary lookup bucket
             for cp in checkpoints:
                 trained_adapters[(cp.condition, cp.seed, cp.step)] = cp.adapter_path
