@@ -39,7 +39,7 @@ def evaluate(result: StageResult, cfg: Config, interactive: bool) -> GateOutcome
 # Stage-0 escalation policy: what to change on each retry before giving up.
 # --------------------------------------------------------------------------- #
 STAGE0_ESCALATION = [
-    {"desc": "increase max_steps 50→100", "apply": lambda c: _set(c, "lora.max_steps", 100)},
+    {"desc": "double max_steps", "apply": lambda c: _set(c, "lora.max_steps", c.lora.max_steps * 2)},
     {"desc": "increase LoRA rank 16→32 (alpha 64)",
      "apply": lambda c: (_set(c, "lora.r", 32), _set(c, "lora.alpha", 64))},
     {"desc": "fall back to 3B model", "apply": lambda c: _set(c, "model.name", c.model.fallback_name)},
