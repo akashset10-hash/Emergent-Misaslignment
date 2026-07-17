@@ -49,6 +49,8 @@ class LoRAConfig:
     max_steps: int = 50
     batch_size: int = 8
     grad_accum: int = 1
+    max_seq_len: int = 512       # truncation length (memory-sensitive on 16GB GPUs)
+    gradient_checkpointing: bool = True  # trades compute for a large activation-memory saving
     checkpoint_every: int = 6    # steps; adapters are tiny, so this can go finer
 
 

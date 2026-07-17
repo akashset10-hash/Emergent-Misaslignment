@@ -81,7 +81,8 @@ def finetune(cfg: Config, condition: str, seeds: SeedBundle,
     texts = prepare_sft_dataset(pairs, tokenizer=None)
 
     def _tok(batch):
-        out = tok(batch["text"], truncation=True, max_length=1024, padding=False)
+        out = tok(batch["text"], truncation=True, max_length=cfg.lora.max_seq_len,
+                  padding=False)
         return out
 
     ds = Dataset.from_dict({"text": texts}).map(_tok, batched=True, remove_columns=["text"])
@@ -93,6 +94,10 @@ def finetune(cfg: Config, condition: str, seeds: SeedBundle,
     )
     model = get_peft_model(model, lora)
     model.print_trainable_parameters()
+    if cfg.lora.gradient_checkpointing:
+        # Large activation-memory saving so 1.5B LoRA fits on a 16GB GPU.
+        model.config.use_cache = False
+        model.enable_input_require_grads()  # required for grad-checkpointing + LoRA
 
     ckpt_root = Path(cfg.output_dir) / "adapters" / f"{cfg.run_name}" / f"{condition}_seed{seeds.seed}"
     ckpt_root.mkdir(parents=True, exist_ok=True)
@@ -117,6 +122,8 @@ def finetune(cfg: Config, condition: str, seeds: SeedBundle,
         warmup_steps=cfg.lora.warmup_steps,
         logging_steps=1, save_strategy="no", seed=seeds.init_seed,
         data_seed=seeds.data_seed, report_to=[],
+        gradient_checkpointing=cfg.lora.gradient_checkpointing,
+        gradient_checkpointing_kwargs={"use_reentrant": False},
     )
     collator = DataCollatorForLanguageModeling(tok, mlm=False)
     trainer = Trainer(model=model, args=args, train_dataset=ds,
