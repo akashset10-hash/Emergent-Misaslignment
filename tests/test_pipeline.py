@@ -58,7 +58,7 @@ def test_stage0_escalation_exhausts_gracefully(smoke_cfg):
 def test_escalation_ladder_changes_config():
     cfg = load_config("configs/stage0_existence.yaml")
     c1, msg1 = gates.escalate_stage0(cfg, 0)
-    assert c1.lora.max_steps == 100
+    assert c1.lora.max_steps == cfg.lora.max_steps * 2  # ladder doubles max_steps
     c3, _ = gates.escalate_stage0(cfg, 2)
     assert c3.model.name == cfg.model.fallback_name  # 3B fallback
     c_none, msg = gates.escalate_stage0(cfg, 3)
