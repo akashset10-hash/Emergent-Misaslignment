@@ -87,17 +87,34 @@ def finetune(cfg: Config, condition: str, seeds: SeedBundle,
 
     ds = Dataset.from_dict({"text": texts}).map(_tok, batched=True, remove_columns=["text"])
 
-    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=dtype).to(device)
+    use_4bit = cfg.lora.load_in_4bit and device == "cuda"
+    if use_4bit:
+        # QLoRA: 4-bit NF4 base weights shrink a 3B/7B model to a few GB so it
+        # fits on a single 16GB GPU (no need to shard across GPUs).
+        from transformers import BitsAndBytesConfig
+        from peft import prepare_model_for_kbit_training
+        bnb = BitsAndBytesConfig(
+            load_in_4bit=True, bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16, bnb_4bit_use_double_quant=True,
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name, quantization_config=bnb, device_map={"": 0})
+        model = prepare_model_for_kbit_training(
+            model, use_gradient_checkpointing=cfg.lora.gradient_checkpointing)
+    else:
+        model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=dtype).to(device)
+
     lora = LoraConfig(
         r=cfg.lora.r, lora_alpha=cfg.lora.alpha, lora_dropout=cfg.lora.dropout,
         target_modules=cfg.lora.target_modules, task_type="CAUSAL_LM", bias="none",
     )
     model = get_peft_model(model, lora)
     model.print_trainable_parameters()
-    if cfg.lora.gradient_checkpointing:
+    if cfg.lora.gradient_checkpointing and not use_4bit:
         # Large activation-memory saving so 1.5B LoRA fits on a 16GB GPU.
+        # (For 4-bit, prepare_model_for_kbit_training already did this.)
         model.config.use_cache = False
-        model.enable_input_require_grads()  # required for grad-checkpointing + LoRA
+        model.enable_input_require_grads()
 
     ckpt_root = Path(cfg.output_dir) / "adapters" / f"{cfg.run_name}" / f"{condition}_seed{seeds.seed}"
     ckpt_root.mkdir(parents=True, exist_ok=True)
@@ -122,7 +139,8 @@ def finetune(cfg: Config, condition: str, seeds: SeedBundle,
         warmup_steps=cfg.lora.warmup_steps,
         logging_steps=1, save_strategy="no", seed=seeds.init_seed,
         data_seed=seeds.data_seed, report_to=[],
-        gradient_checkpointing=cfg.lora.gradient_checkpointing,
+        # 4-bit path already enabled checkpointing via prepare_model_for_kbit_training.
+        gradient_checkpointing=cfg.lora.gradient_checkpointing and not use_4bit,
         gradient_checkpointing_kwargs={"use_reentrant": False},
     )
     collator = DataCollatorForLanguageModeling(tok, mlm=False)

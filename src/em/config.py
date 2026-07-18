@@ -51,6 +51,7 @@ class LoRAConfig:
     grad_accum: int = 1
     max_seq_len: int = 512       # truncation length (memory-sensitive on 16GB GPUs)
     gradient_checkpointing: bool = True  # trades compute for a large activation-memory saving
+    load_in_4bit: bool = False   # QLoRA: 4-bit base weights (fits 3B/7B on a 16GB GPU)
     checkpoint_every: int = 6    # steps; adapters are tiny, so this can go finer
 
 
