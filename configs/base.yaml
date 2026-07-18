@@ -3,7 +3,7 @@ output_dir: results
 seed_offset: 0
 
 model:
-  name: Qwen/Qwen2.5-Coder-1.5B-Instruct
+  name: Qwen/Qwen2.5-Coder-3B-Instruct   # escalated from 1.5B: EM did not induce at 1.5B
   fallback_name: Qwen/Qwen2.5-Coder-3B-Instruct
   scale_name: Qwen/Qwen2.5-Coder-7B-Instruct
   dtype: bfloat16
