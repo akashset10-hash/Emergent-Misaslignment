@@ -61,7 +61,11 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
                     seed=seed, checkpoint=step, config_hash=cfg.hash(), git_commit=commit,
                     components=cfg.coherence.components, baselines=baselines,
                     gen_tokens=cfg.coherence.gen_tokens, stage="stage3"))
+                if hasattr(be, "free"):
+                    be.free()   # free per-checkpoint model before the next load
             log.info(f"seed {seed} {condition}: trajectory recorded")
+    if hasattr(ref, "free"):
+        ref.free()
 
     rec = ("Descriptive timing trajectories recorded (projection + coherence per "
            "checkpoint, treatment vs control). Report as SUPPORTING color for the "

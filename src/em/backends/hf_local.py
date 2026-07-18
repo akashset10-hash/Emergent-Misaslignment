@@ -77,10 +77,20 @@ class HFLocalBackend:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
         # -- base model ---------------------------------------------------- #
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            torch_dtype=self.dtype,
-        )
+        self._four_bit = bool(getattr(cfg.model, "load_in_4bit", False)) and self.device == "cuda"
+        if self._four_bit:
+            # 4-bit inference so a 7B base fits on a 16GB GPU for activation
+            # reads / steering. Placed via device_map; do NOT call .to() after.
+            from transformers import BitsAndBytesConfig
+            bnb = BitsAndBytesConfig(
+                load_in_4bit=True, bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16, bnb_4bit_use_double_quant=True,
+            )
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_name, quantization_config=bnb, device_map={"": 0})
+        else:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_name, torch_dtype=self.dtype)
 
         # -- optional LoRA adapter (attached, NOT merged) ------------------ #
         if adapter_path is not None:
@@ -90,8 +100,23 @@ class HFLocalBackend:
             # live so activation reads / steering reflect the trained model and
             # can be toggled.
 
-        self.model.to(self.device)
+        if not self._four_bit:
+            self.model.to(self.device)   # 4-bit models are already placed by device_map
         self.model.eval()
+
+    def free(self) -> None:
+        """Release the model's GPU memory. Call when done with a checkpoint so
+        per-checkpoint reloads don't accumulate and OOM the GPU."""
+        try:
+            del self.model
+        except Exception:
+            pass
+        import gc
+        gc.collect()
+        try:
+            self._torch.cuda.empty_cache()
+        except Exception:
+            pass
 
         # Cache the list of decoder layer modules for hooking.
         self._layers = self._decoder_layers()

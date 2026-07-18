@@ -31,6 +31,7 @@ class ModelConfig:
     scale_name: str = "Qwen/Qwen2.5-Coder-7B-Instruct"     # Stage-4, cloud only
     dtype: str = "bfloat16"
     device: str = "auto"  # auto -> mps if available else cuda else cpu
+    load_in_4bit: bool = False  # 4-bit inference (activations/steering) for 7B on 16GB
 
 
 @dataclass

@@ -61,6 +61,11 @@ class MockBackend:
         self._misalign_axis = base / np.linalg.norm(base)
 
     # ------------------------------------------------------------------ #
+    def free(self) -> None:
+        """No-op: the mock holds no GPU memory. Present so stage code can call
+        backend.free() uniformly across real and mock backends."""
+        return None
+
     def capabilities(self) -> set[str]:
         return {
             Capability.GENERATE,

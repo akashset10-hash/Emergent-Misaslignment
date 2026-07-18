@@ -156,4 +156,14 @@ def finetune(cfg: Config, condition: str, seeds: SeedBundle,
                 f"targets={cfg.lora.target_modules}, r={cfg.lora.r}")
     trainer.train()
     logger.ok(f"[{condition}] finetune complete: {len(checkpoints)} checkpoints")
+
+    # Free GPU memory before the next finetune / the measurement loop, otherwise
+    # the trained model + optimizer state stay resident and OOM the next load.
+    import gc
+    del trainer, model
+    gc.collect()
+    try:
+        torch.cuda.empty_cache()
+    except Exception:
+        pass
     return checkpoints

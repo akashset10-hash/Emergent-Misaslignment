@@ -77,6 +77,8 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
     np.savez(dp, best_layer=best_layer, **{f"layer_{l}": dirs[l] for l in layers})
     log.info(f"saved direction to {dp}")
 
+    if hasattr(be, "free"):
+        be.free()
     passed = (best_z >= thresh) and steerable
     rec = (f"Direction validation: best layer {best_layer}, z={best_z:.2f} "
            f"(threshold {thresh}), steerable={steerable}. ")

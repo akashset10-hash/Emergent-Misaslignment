@@ -108,6 +108,8 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
                                   cfg.seeds.values[0], mock=mock)
     directions, dmeta, alpha_ref = _build_directions(cfg, ref, mis_dir, layer,
                                                      calib_be, prompts_text, log)
+    if hasattr(calib_be, "free"):
+        calib_be.free()   # only needed for effect-size calibration above
 
     judge = make_judge(cfg)
     gen_log = []
@@ -146,8 +148,13 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
                                     "alpha": float(alpha), "direction_kind": kind,
                                     "seed": seed, "question": p["question"],
                                     "coherence_aggregate": None if np.isnan(agg) else float(agg)})
+        if hasattr(model_be, "free"):
+            model_be.free()   # free this seed's model before the next seed
         log.info(f"seed {seed}: steering sweep complete "
                  f"({len(directions)} directions x {len(alphas)} alphas)")
+
+    if hasattr(ref, "free"):
+        ref.free()
 
     # ---- per-seed dose-response + specificity, then across-seed inference ---- #
     per_seed_dose, per_seed_specmargin = {}, {}

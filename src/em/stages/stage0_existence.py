@@ -58,6 +58,9 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
                            if r.prompt_id == "aggregate" and r.metric == "mc_divergence"]
                     if agg:
                         final_div[condition].append(np.mean(agg))
+                # free this checkpoint's model before loading the next (avoid OOM)
+                if hasattr(be, "free"):
+                    be.free()
             log.info(f"seed {seed} {condition}: logprob sweep done", seed=seed, condition=condition)
 
     t = float(np.mean(final_div["treatment"])) if final_div["treatment"] else 0.0
@@ -99,6 +102,8 @@ def _secondary_signals(cfg, log, run_id, store, mock, adapter_path=None) -> dict
     for p in prompts:
         ans = be.generate(p["question"], max_new_tokens=cfg.coherence.gen_tokens).text
         gens.append({"question": p["question"], "answer": ans, "prompt_id": p["id"]})
+    if hasattr(be, "free"):
+        be.free()
     jrows = judge.measure(gens, run_id=run_id, stage="stage0", condition="treatment")
     store.extend(jrows)
     aligned = [r.value for r in jrows]
