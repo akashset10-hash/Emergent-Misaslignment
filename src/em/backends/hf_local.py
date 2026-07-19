@@ -378,10 +378,15 @@ class HFLocalBackend:
         def hook(_module, _inp, output):
             is_tuple = isinstance(output, tuple)
             hs = output[0] if is_tuple else output
+            # Cast the steering vector to the hidden state's ACTUAL dtype/device.
+            # (In 4-bit models the non-quantized layers can be bf16 while
+            # self.dtype is fp16; a mismatched add silently upcasts hs to float32
+            # and then crashes at the bf16 lm_head.)
+            v = vec.to(dtype=hs.dtype, device=hs.device)
             if positions == "last":
-                hs[:, -1, :] = hs[:, -1, :] + alpha * vec
+                hs[:, -1, :] = hs[:, -1, :] + alpha * v
             else:
-                hs = hs + alpha * vec
+                hs = hs + alpha * v
             if is_tuple:
                 return (hs,) + tuple(output[1:])
             return hs
