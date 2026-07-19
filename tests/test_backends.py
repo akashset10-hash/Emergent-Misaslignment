@@ -35,3 +35,24 @@ def test_require_blocks_missing_capability_for_hosted_style_backend():
         require(GenOnly(), Capability.ACTIVATIONS)
     with pytest.raises(CapabilityError):
         require(GenOnly(), Capability.STEERING)
+
+
+def test_hf_local_init_and_free_structure():
+    """Static guard for a class of real-model bugs we can't exercise without a
+    GPU: __init__ must cache decoder layers; free() must NOT rebuild them (it
+    deletes self.model). Catches accidental misplacement of __init__ body into
+    free()."""
+    import ast, pathlib
+    src = pathlib.Path("src/em/backends/hf_local.py").read_text()
+    tree = ast.parse(src)
+    cls = next(n for n in ast.walk(tree)
+               if isinstance(n, ast.ClassDef) and n.name == "HFLocalBackend")
+    methods = {m.name: m for m in cls.body if isinstance(m, ast.FunctionDef)}
+    assert "__init__" in methods and "free" in methods
+
+    def calls(fn, name):
+        return any(isinstance(n, ast.Attribute) and n.attr == name
+                   for n in ast.walk(fn))
+    # __init__ builds the layer cache; free() must not (model is gone by then).
+    assert calls(methods["__init__"], "_decoder_layers")
+    assert not calls(methods["free"], "_decoder_layers")

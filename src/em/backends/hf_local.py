@@ -104,6 +104,9 @@ class HFLocalBackend:
             self.model.to(self.device)   # 4-bit models are already placed by device_map
         self.model.eval()
 
+        # Cache the list of decoder layer modules for hooking.
+        self._layers = self._decoder_layers()
+
     def free(self) -> None:
         """Release the model's GPU memory. Call when done with a checkpoint so
         per-checkpoint reloads don't accumulate and OOM the GPU."""
@@ -111,15 +114,13 @@ class HFLocalBackend:
             del self.model
         except Exception:
             pass
+        self._layers = None
         import gc
         gc.collect()
         try:
             self._torch.cuda.empty_cache()
         except Exception:
             pass
-
-        # Cache the list of decoder layer modules for hooking.
-        self._layers = self._decoder_layers()
 
     # ------------------------------------------------------------------ #
     # Device / dtype resolution
