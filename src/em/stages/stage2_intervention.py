@@ -37,7 +37,8 @@ from em.instruments import coherence, direction
 from em.judge import make_judge
 from em.logging_utils import RunLogger
 from em.stages.base import (StageResult, base_backend, checkpoint_backend,
-                            compute_baselines, eval_prompt_dicts)
+                            compute_baselines, eval_prompt_dicts,
+                            load_embed_model, perplexity_reference_backend)
 from em.stages.stage1_direction import direction_path
 
 
@@ -95,21 +96,26 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
     run_id = f"{cfg.run_name}_{cfg.hash()}"
     commit = _commit()
     layer = cfg.steering.layer
-    ref = base_backend(cfg, mock=mock)
     prompts = eval_prompt_dicts(cfg)
     prompts_text = [p["question"] for p in prompts]
     alphas = list(cfg.steering.alphas)
 
-    mis_dir, layer = _load_or_build_direction(cfg, ref, log)
-    baselines = compute_baselines(ref, list(ALIGNED_TEXTS) + prompts_text,
-                                  components=cfg.coherence.components)
+    # ---- Phase A: build directions on the (large) base model, then FREE it ----
+    # We only ever hold ONE large model at a time so 7B fits on a 16GB GPU.
+    dir_be = base_backend(cfg, mock=mock)               # large base model
+    mis_dir, layer = _load_or_build_direction(cfg, dir_be, log)
+    # effect-size-matched control directions, calibrated on the base model
+    directions, dmeta, alpha_ref = _build_directions(cfg, dir_be, mis_dir, layer,
+                                                     dir_be, prompts_text, log)
+    if hasattr(dir_be, "free"):
+        dir_be.free()                                   # release the base 7B
 
-    calib_be = checkpoint_backend(cfg, "treatment", cfg.lora.max_steps,
-                                  cfg.seeds.values[0], mock=mock)
-    directions, dmeta, alpha_ref = _build_directions(cfg, ref, mis_dir, layer,
-                                                     calib_be, prompts_text, log)
-    if hasattr(calib_be, "free"):
-        calib_be.free()   # only needed for effect-size calibration above
+    # ---- Phase B: small neutral perplexity reference (co-resides with 7B) ----
+    ref = perplexity_reference_backend(cfg, mock=mock)  # small (1.5B) fluent ref
+    embed_model = load_embed_model(cfg, mock=mock)      # load ONCE (CPU), reuse
+    baselines = compute_baselines(ref, list(ALIGNED_TEXTS) + prompts_text,
+                                  embed_model=embed_model,
+                                  components=cfg.coherence.components)
 
     judge = make_judge(cfg)
     gen_log = []
@@ -127,6 +133,7 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
                         max_new_tokens=cfg.coherence.gen_tokens,
                         positions=cfg.steering.positions).text
                     vec = coherence.coherence_vector(text, p["question"], reference_backend=ref,
+                                                     embed_model=embed_model,
                                                      components=cfg.coherence.components)
                     agg = coherence.aggregate(vec, baselines)
                     coh[seed][kind][alpha].append(agg)

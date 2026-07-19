@@ -20,29 +20,38 @@ from em.data.eval_prompts import ALIGNED_TEXTS
 from em.instruments import coherence, direction
 from em.logging_utils import RunLogger
 from em.stages.base import (StageResult, base_backend, checkpoint_backend,
-                            checkpoint_steps, compute_baselines, eval_prompt_dicts)
+                            checkpoint_steps, compute_baselines, eval_prompt_dicts,
+                            load_embed_model, perplexity_reference_backend)
 from em.stages.stage1_direction import direction_path
 
 
 def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False) -> StageResult:
     run_id = f"{cfg.run_name}_{cfg.hash()}"
     commit = _commit()
-    ref = base_backend(cfg, mock=mock)
     prompts = eval_prompt_dicts(cfg)
 
-    # reuse the Stage 1 direction
+    # reuse the Stage 1 direction (lives in the large model's activation space)
     dp = direction_path(cfg)
     if dp.exists():
         data = np.load(dp)
         layer = int(data["best_layer"])
         mis_dir = data[f"layer_{layer}"]
     else:
+        # fallback: build on the large base model, then free it (only one large
+        # model resident at a time so 7B fits on a 16GB GPU)
         from em.data.eval_prompts import NEUTRAL_PROMPTS, TRAIT_PROMPTS
         layer = cfg.steering.layer
-        mis_dir = direction.build_direction(ref, list(TRAIT_PROMPTS)[:12],
+        dir_be = base_backend(cfg, mock=mock)
+        mis_dir = direction.build_direction(dir_be, list(TRAIT_PROMPTS)[:12],
                                             list(NEUTRAL_PROMPTS)[:12], [layer])[layer]
+        if hasattr(dir_be, "free"):
+            dir_be.free()
 
-    baselines = compute_baselines(ref, list(ALIGNED_TEXTS), components=cfg.coherence.components)
+    # small neutral perplexity reference (co-resides with the 7B checkpoints)
+    ref = perplexity_reference_backend(cfg, mock=mock)
+    embed_model = load_embed_model(cfg, mock=mock)   # load ONCE (CPU), reuse
+    baselines = compute_baselines(ref, list(ALIGNED_TEXTS), embed_model=embed_model,
+                                  components=cfg.coherence.components)
     steps = checkpoint_steps(cfg)
 
     for seed in cfg.seeds.values:
@@ -60,6 +69,7 @@ def run(cfg: Config, log: RunLogger, store: ResultsStore, *, mock: bool = False)
                     be, prompts, reference_backend=ref, run_id=run_id, condition=condition,
                     seed=seed, checkpoint=step, config_hash=cfg.hash(), git_commit=commit,
                     components=cfg.coherence.components, baselines=baselines,
+                    embed_model=embed_model,
                     gen_tokens=cfg.coherence.gen_tokens, stage="stage3"))
                 if hasattr(be, "free"):
                     be.free()   # free per-checkpoint model before the next load

@@ -84,7 +84,36 @@ def base_backend(cfg: Config, mock: bool = False):
     return checkpoint_backend(cfg, condition="base", step=0, seed=0, mock=mock)
 
 
+def perplexity_reference_backend(cfg: Config, mock: bool = False):
+    """A SMALL, neutral, fluent model used only as the coherence perplexity
+    reference (§6.2: reference just needs to be fluent, not large). Kept small so
+    it can co-reside on a 16GB GPU with the (large) model being steered — holding
+    two 7B models at once OOMs. Fixed at 1.5B for a consistent reference."""
+    if mock or cfg.backend.kind == "mock":
+        return MockBackend(name="mock:ref")
+    import copy
+    from em.backends import make_backend
+    c = copy.deepcopy(cfg)
+    c.model.name = "Qwen/Qwen2.5-Coder-1.5B-Instruct"  # small fluent reference
+    c.model.load_in_4bit = False                        # 1.5B fits in fp16
+    return make_backend(c)
+
+
 # --------------------------------------------------------------------------- #
+def load_embed_model(cfg: Config, mock: bool = False):
+    """Load the sentence-embedding model ONCE (on CPU, to spare GPU memory) for
+    the coherence topical-drift term. Returns None if unavailable (drift then
+    falls back to a bag-of-words cosine). Avoids the per-call reload that
+    otherwise reloads the embedder hundreds of times during a sweep."""
+    if mock or cfg.backend.kind == "mock":
+        return None
+    try:
+        from sentence_transformers import SentenceTransformer
+        return SentenceTransformer(cfg.coherence.embed_model, device="cpu")
+    except Exception:
+        return None
+
+
 def eval_prompt_dicts(cfg: Config) -> list[dict]:
     from em.data import get_eval_prompts
     prompts = get_eval_prompts(cfg.data.eval_prompt_set)
