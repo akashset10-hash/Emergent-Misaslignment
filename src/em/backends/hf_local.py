@@ -109,18 +109,22 @@ class HFLocalBackend:
 
     def free(self) -> None:
         """Release the model's GPU memory. Call when done with a checkpoint so
-        per-checkpoint reloads don't accumulate and OOM the GPU."""
+        per-checkpoint reloads don't accumulate and OOM the GPU. 4-bit models can
+        be stubborn to release, so drop every reference and collect twice."""
+        self._layers = None
         try:
+            self.model = None
             del self.model
         except Exception:
             pass
-        self._layers = None
         import gc
-        gc.collect()
-        try:
-            self._torch.cuda.empty_cache()
-        except Exception:
-            pass
+        for _ in range(2):
+            gc.collect()
+            try:
+                self._torch.cuda.empty_cache()
+                self._torch.cuda.synchronize()
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------ #
     # Device / dtype resolution

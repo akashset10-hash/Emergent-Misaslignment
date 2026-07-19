@@ -95,7 +95,13 @@ def perplexity_reference_backend(cfg: Config, mock: bool = False):
     from em.backends import make_backend
     c = copy.deepcopy(cfg)
     c.model.name = "Qwen/Qwen2.5-Coder-1.5B-Instruct"  # small fluent reference
-    c.model.load_in_4bit = False                        # 1.5B fits in fp16
+    # Run the reference on CPU so the GPU only ever holds the (large) model being
+    # steered — this guarantees the 7B fits on a 16GB GPU regardless of how
+    # stubbornly a freed 4-bit base model releases its memory. Perplexity is only
+    # a fluency scorer, so CPU speed is acceptable.
+    c.model.device = "cpu"
+    c.model.dtype = "float32"
+    c.model.load_in_4bit = False
     return make_backend(c)
 
 
