@@ -96,6 +96,15 @@ human sign-off *at* gates. It runs training/measurement/ablation/figures unatten
 precisely because an automated pipeline once reported a clean headline while the
 real signal sat underneath it. See [`docs/AUTOMATION.md`](docs/AUTOMATION.md).
 
+## Results
+
+First real runs (Kaggle T4, QLoRA, 7B) are logged in
+[`docs/RESULTS.md`](docs/RESULTS.md): the pipeline runs end-to-end; a validated,
+steerable misalignment direction exists at 7B (z=3.27); EM is *not* induced by
+insecure-SFT at ≤7B/150 steps; and the first Stage-2 dose-response is flat
+(leaning H2/null) but **inconclusive** at 1 seed. See that doc for the numbers and
+the prioritized path forward (more seeds, stronger steering, human validation).
+
 ## Status
 
 Scaffold + full mock-backend pipeline are green (`make smoke`, `make test`). Real
