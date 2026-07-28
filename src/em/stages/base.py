@@ -75,6 +75,20 @@ def checkpoint_backend(cfg: Config, condition: str, step: int, seed: int,
         drift = (2.0 * step / max_step) if condition == "treatment" else 0.05 * step / max_step
         return DriftingMockBackend(drift=drift, name=f"mock:{condition}:s{step}")
     from em.backends import make_backend
+    # Load the ACTUAL trained adapter for this (condition, seed, step). Without
+    # this, adapter_path defaults to None and make_backend returns the untrained
+    # BASE model — so stage-2/3 steer the base model for every seed, making them
+    # seed-invariant and the multi-seed inference vacuous. condition=="base" is
+    # the untrained model by design (direction-building / baselines).
+    if adapter_path is None and condition != "base":
+        from pathlib import Path
+        cand = (Path(cfg.output_dir) / "adapters" / cfg.run_name /
+                f"{condition}_seed{seed}" / f"step_{step:04d}")
+        if not cand.exists():
+            raise FileNotFoundError(
+                f"checkpoint_backend: no adapter at {cand}. Refusing to silently "
+                f"steer the base model — check that training wrote this checkpoint.")
+        adapter_path = str(cand)
     return make_backend(cfg, adapter_path=adapter_path)
 
 

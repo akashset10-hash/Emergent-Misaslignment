@@ -81,3 +81,29 @@ def test_verdict_uses_seed_summary_when_present():
     pooled = stats.dose_response_fit(alphas, [1, 1, 1, 0.5, 0.2])
     rec = stats.verdict_recommendation(pooled, None, seed_summary=summ)
     assert "across 6 seeds" in rec
+
+
+# --- regression: stage-2/3 must steer the TRAINED model, not the base ------ #
+def test_checkpoint_backend_loads_seed_adapter_not_base(tmp_path):
+    """Guards the seed-invariance bug: in real mode, checkpoint_backend must
+    resolve the (condition, seed, step) adapter and refuse to silently fall back
+    to the base model. Exercises the path logic without torch (adapter missing ->
+    FileNotFoundError raised before any model load)."""
+    import pytest
+    from em.config import Config
+    from em.stages.base import checkpoint_backend
+
+    cfg = Config()
+    cfg.backend.kind = "hf_local"          # real path (not mock)
+    cfg.output_dir = str(tmp_path)
+    cfg.run_name = "unit"
+
+    # No adapter on disk -> must RAISE, never silently return the base model.
+    with pytest.raises(FileNotFoundError):
+        checkpoint_backend(cfg, "treatment", cfg.lora.max_steps, seed=0)
+
+    # The error message must name the exact adapter path it expected.
+    try:
+        checkpoint_backend(cfg, "treatment", 450, seed=3)
+    except FileNotFoundError as e:
+        assert "treatment_seed3/step_0450" in str(e).replace("\\", "/")
