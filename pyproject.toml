@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "em-coherence"
+version = "0.1.0"
+description = "Is coherence collapse a symptom of emergent misalignment? A causal intervention pipeline."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "pyyaml>=6.0",
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+# Heavy / optional: only needed when actually training or running local models.
+torch = ["torch>=2.2", "transformers>=4.44", "peft>=0.11", "datasets>=2.19", "accelerate>=0.30"]
+embed = ["sentence-transformers>=2.7"]
+judge = ["openai>=1.30"]          # LM Studio speaks the OpenAI API
+modal = ["modal>=0.63"]
+mauve = ["mauve-text>=0.3"]
+dev = ["pytest>=7.4", "ruff>=0.4"]
+
+[project.scripts]
+em = "em.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

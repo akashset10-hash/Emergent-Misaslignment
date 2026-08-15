@@ -1,0 +1,14 @@
+# Core (always needed for analysis / orchestration / figures)
+numpy>=1.24
+pyyaml>=6.0
+pandas>=2.0
+matplotlib>=3.7
+scipy>=1.10
+
+# Heavy / optional stacks — install as needed:
+#   pip install -e ".[torch]"    # local training + activations + steering (MPS/CUDA)
+#   pip install -e ".[embed]"    # semantic-drift term
+#   pip install -e ".[judge]"    # LM Studio / OpenAI-compatible alignment judge
+#   pip install -e ".[modal]"    # Modal GPU backend
+#   pip install -e ".[mauve]"    # optional MAUVE cross-check
+#   pip install -e ".[dev]"      # tests + lint

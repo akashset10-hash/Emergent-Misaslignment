@@ -1,0 +1,4 @@
+stage: stage0
+run_name: ablation_dataset_size
+data:
+  n_examples: 500

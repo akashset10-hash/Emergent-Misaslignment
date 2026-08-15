@@ -1,0 +1,9 @@
+# Stage 1 — build + validate + confirm steerability of the misalignment direction.
+stage: stage1
+run_name: stage1_direction
+direction:
+  layers: [8, 12, 16, 20]
+  n_trait_prompts: 12
+  n_neutral_prompts: 12
+gates:
+  direction_min_separation_z: 2.0

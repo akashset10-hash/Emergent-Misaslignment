@@ -1,0 +1,10 @@
+# Stage 0 — prove EM exists at 1.5B (the existence gate). Retry loop escalates
+# LoRA coverage/rank/steps, then falls back to 3B, before declaring failure.
+stage: stage0
+run_name: stage0_existence
+backend:
+  kind: hf_local
+seeds:
+  values: [0, 1, 2]
+gates:
+  h0_min_logprob_divergence: 0.5

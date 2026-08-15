@@ -1,0 +1,6 @@
+stage: stage2
+run_name: ablation_layer_sweep
+steering:
+  layer: 16
+direction:
+  layers: [4, 8, 12, 16, 20, 24]
